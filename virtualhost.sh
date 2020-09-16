@@ -11,8 +11,11 @@ apacheUser=$(ps -ef | egrep '(httpd|apache2|apache)' | grep -v root | head -n1 |
 email='webmaster@localhost'
 sitesEnabled='/etc/apache2/sites-enabled/'
 sitesAvailable='/etc/apache2/sites-available/'
-userDir='/var/www/'
+userDir='/var/apps/'
 sitesAvailabledomain=$sitesAvailable$domain.conf
+
+IFS='.' read -ra domain_parts <<< "$domain"
+foldername="${domain_parts[0]}_${domain_parts[1]}"
 
 ### don't modify from here unless you know what you are doing ####
 
@@ -42,7 +45,7 @@ if [[ "$rootDir" =~ ^/ ]]; then
 	userDir=''
 fi
 
-rootDir=$userDir$rootDir
+rootDir=$userDir$foldername
 
 if [ "$action" == 'create' ]
 	then
@@ -75,9 +78,6 @@ if [ "$action" == 'create' ]
 			ServerName $domain
 			ServerAlias $domain
 			DocumentRoot $rootDir
-			<Directory />
-				AllowOverride All
-			</Directory>
 			<Directory $rootDir>
 				Options Indexes FollowSymLinks MultiViews
 				AllowOverride all
@@ -94,26 +94,6 @@ if [ "$action" == 'create' ]
 			echo -e $"\nNew Virtual Host Created\n"
 		fi
 
-		### Add domain in /etc/hosts
-		if ! echo "127.0.0.1	$domain" >> /etc/hosts
-		then
-			echo $"ERROR: Not able to write in /etc/hosts"
-			exit;
-		else
-			echo -e $"Host added to /etc/hosts file \n"
-		fi
-
-		### Add domain in /mnt/c/Windows/System32/drivers/etc/hosts (Windows Subsytem for Linux)
-		if [ -e /mnt/c/Windows/System32/drivers/etc/hosts ]
-		then
-			if ! echo -e "\r127.0.0.1       $domain" >> /mnt/c/Windows/System32/drivers/etc/hosts
-			then
-				echo $"ERROR: Not able to write in /mnt/c/Windows/System32/drivers/etc/hosts (Hint: Try running Bash as administrator)"
-			else
-				echo -e $"Host added to /mnt/c/Windows/System32/drivers/etc/hosts file \n"
-			fi
-		fi
-
 		if [ "$owner" == "" ]; then
 			iam=$(whoami)
 			if [ "$iam" == "root" ]; then
@@ -126,13 +106,15 @@ if [ "$action" == 'create' ]
 		fi
 
 		### enable website
-		a2ensite $domain
+		#a2ensite $domain
 
 		### restart Apache
-		/etc/init.d/apache2 reload
+		#/etc/init.d/apache2 reload
+		/usr/sbin/apachectl configtest
 
 		### show the finished message
 		echo -e $"Complete! \nYou now have a new Virtual Host \nYour new host is: http://$domain \nAnd its located at $rootDir"
+		echo -e $"Enable the new site by typing: a2ensite $domain"
 		exit;
 	else
 		### check whether domain already exists
@@ -140,22 +122,8 @@ if [ "$action" == 'create' ]
 			echo -e $"This domain does not exist.\nPlease try another one"
 			exit;
 		else
-			### Delete domain in /etc/hosts
-			newhost=${domain//./\\.}
-			sed -i "/$newhost/d" /etc/hosts
-
-			### Delete domain in /mnt/c/Windows/System32/drivers/etc/hosts (Windows Subsytem for Linux)
-			if [ -e /mnt/c/Windows/System32/drivers/etc/hosts ]
-			then
-				newhost=${domain//./\\.}
-				sed -i "/$newhost/d" /mnt/c/Windows/System32/drivers/etc/hosts
-			fi
-
 			### disable website
 			a2dissite $domain
-
-			### restart Apache
-			/etc/init.d/apache2 reload
 
 			### Delete virtual host rules files
 			rm $sitesAvailabledomain
@@ -169,7 +137,7 @@ if [ "$action" == 'create' ]
 			if [ "$deldir" == 'y' -o "$deldir" == 'Y' ]; then
 				### Delete the directory
 				rm -rf $rootDir
-				echo -e $"Directory deleted"
+				echo -e $"Directory deleted ($rootDir)"
 			else
 				echo -e $"Host directory conserved"
 			fi
